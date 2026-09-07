@@ -1,0 +1,48 @@
+{
+  "name": "@molecare/health-data",
+  "version": "0.1.0",
+  "description": "Unified HealthKit + Health Connect facade for React Native.",
+  "main": "src/index.js",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MoleCare/rn-health-data.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MoleCare/rn-health-data/issues"
+  },
+  "homepage": "https://github.com/MoleCare/rn-health-data#readme",
+  "keywords": [
+    "react-native",
+    "healthkit",
+    "health-connect",
+    "fitness",
+    "healthcare"
+  ],
+  "peerDependencies": {
+    "react-native": ">=0.70.0",
+    "react-native-health": ">=1.19.0",
+    "react-native-health-connect": ">=3.5.0"
+  },
+  "peerDependenciesMeta": {
+    "react-native-health": {
+      "optional": true
+    },
+    "react-native-health-connect": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "test": "echo \"no tests yet\"",
+    "lint": "echo \"no lint configured yet\""
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
+  "publishConfig": {
+    "access": "restricted"
+  }
+}
