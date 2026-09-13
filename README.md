@@ -114,32 +114,48 @@ Android-only app does not need `react-native-health`.
 ## Usage
 
 ```js
-import HealthData from '@molecare/health-data';
+import {HealthDataService} from '@molecare/health-data';
 
-if (await HealthData.isAvailable()) {
+// Create it once and keep it with your app's other services.
+const health = new HealthDataService();
+
+if (await health.isAvailable()) {
   // Ask only for what your app uses.
-  await HealthData.requestPermissions(['steps', 'sleep']);
+  await health.requestPermissions(['steps', 'sleep']);
 
-  const steps = await HealthData.getTodaySteps();
-  const sleepHours = await HealthData.getLastNightSleepHours(); // null when nothing is recorded
+  const steps = await health.getTodaySteps();
+  const sleepHours = await health.getLastNightSleepHours(); // null when nothing is recorded
 }
 ```
 
-The default export is a shared instance. `HealthDataService` is the class, if
-you need your own instance.
+## No state, no global settings
 
-### Outdoor activities
+The package has no shared instance and no global configuration. Your app
+creates a `HealthDataService` and chooses its settings; two services with
+different settings never affect each other. Options are copied and frozen when
+the service is created, and an unknown or invalid option throws a `TypeError`.
 
-`getWorkouts` marks each workout `isOutdoor`. Change which activities count:
+| Option | Default | Meaning |
+|---|---|---|
+| `outdoorActivitiesIos` | `DEFAULT_OUTDOOR_ACTIVITIES_IOS` | HealthKit activity names `getWorkouts` marks `isOutdoor` |
+| `outdoorExerciseTypesAndroid` | `DEFAULT_OUTDOOR_EXERCISE_TYPES_ANDROID` | Health Connect exercise type numbers marked `isOutdoor` |
+| `sleepWindowStartHour` | `18` | "Last night" starts at this hour yesterday (local time) |
+| `sleepWindowEndHour` | `12` | ...and ends at this hour today |
+| `summaryDays` | `7` | `getWeeklyOutdoorSummary` reads from midnight this many days ago |
 
 ```js
-import {configure, DEFAULT_OUTDOOR_ACTIVITIES_IOS} from '@molecare/health-data';
+import {HealthDataService, DEFAULT_OUTDOOR_ACTIVITIES_IOS} from '@molecare/health-data';
 
-configure({
-  outdoorActivitiesIos: [...DEFAULT_OUTDOOR_ACTIVITIES_IOS, 'Yoga'], // HealthKit activity names
-  outdoorExerciseTypesAndroid: [56, 79, 8], // Health Connect ExerciseType numbers
+const health = new HealthDataService({
+  outdoorActivitiesIos: [...DEFAULT_OUTDOOR_ACTIVITIES_IOS, 'Yoga'],
+  outdoorExerciseTypesAndroid: [56, 79, 8],
+  sleepWindowStartHour: 20,
 });
 ```
+
+Nothing is cached: `isAvailable()` asks the platform each time, because Health
+Connect can be installed while your app is running. The package stores no
+health data; what to keep, and where, is your app's decision.
 
 ## API
 
@@ -151,12 +167,13 @@ configure({
 | `getStepsData(start, end)` | `[{startDate, endDate, value}]` | One entry per day |
 | `getActiveEnergyBurned(start, end)` | `[{startDate, endDate, value}]` | Kilocalories |
 | `getSleepData(start, end)` | raw samples | iOS: HealthKit sleep samples. Android: sessions, with stages in `value` |
-| `getLastNightSleepHours()` | `number \| null` | 18:00 yesterday to 12:00 today. Time asleep only; overlapping samples count once |
+| `getLastNightSleepHours()` | `number \| null` | `sleepWindowStartHour` yesterday to `sleepWindowEndHour` today (18:00 to 12:00 by default). Time asleep only; overlapping samples count once |
 | `getWorkouts(start, end)` | `[{activityType, duration, startDate, endDate, isOutdoor}]` | `duration` in minutes |
 | `getTodayOutdoorWorkoutMinutes()` | `number` | |
 | `getTodayWaterIntake()` | `number \| null` | Litres |
-| `getWeeklyOutdoorSummary()` | `{totalOutdoorMinutes, avgDailySteps, activeDays}` | Last 7 days |
-| `isInitialized()` | `boolean` | `true` after `requestPermissions` |
+| `getWeeklyOutdoorSummary()` | `{totalOutdoorMinutes, avgDailySteps, activeDays}` | From midnight `summaryDays` (7) days ago until now |
+| `isInitialized()` | `boolean` | `true` once `requestPermissions` has finished on this service. It does not mean access was granted; HealthKit never tells apps that |
+| `options` | `object` | The frozen options the service was created with |
 
 When a read fails (no permission, module missing, platform error) the method
 returns an empty value (`0`, `[]` or `null`) instead of throwing.
