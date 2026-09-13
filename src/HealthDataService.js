@@ -51,6 +51,50 @@ function lastNightEnd() {
   return d;
 }
 
+// HealthKit sleep values that mean asleep (INBED and AWAKE do not).
+const IOS_ASLEEP_VALUES = new Set(['ASLEEP', 'CORE', 'DEEP', 'REM']);
+
+// Health Connect SleepStageType: SLEEPING 2, LIGHT 4, DEEP 5, REM 6.
+// AWAKE 1, OUT_OF_BED 3 and UNKNOWN 0 are not sleep.
+const ANDROID_ASLEEP_STAGES = new Set([2, 4, 5, 6]);
+
+/**
+ * Total length of a set of time intervals, counting overlaps once. Phones and
+ * watches (and several apps) often write overlapping samples for the same
+ * night; adding them up counts that time twice.
+ */
+export function mergedDurationMs(intervals) {
+  const spans = intervals
+    .map(({start, end}) => [new Date(start).getTime(), new Date(end).getTime()])
+    .filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e) && e > s)
+    .sort((a, b) => a[0] - b[0]);
+
+  let total = 0;
+  let current = null;
+  for (const [s, e] of spans) {
+    if (!current || s > current[1]) {
+      if (current) {
+        total += current[1] - current[0];
+      }
+      current = [s, e];
+    } else if (e > current[1]) {
+      current[1] = e;
+    }
+  }
+  if (current) {
+    total += current[1] - current[0];
+  }
+  return total;
+}
+
+function timeRange(startDate, endDate) {
+  return {
+    operator: 'between',
+    startTime: startDate.toISOString(),
+    endTime: endDate.toISOString(),
+  };
+}
+
 export class HealthDataService {
   constructor() {
     this._initialized = false;
@@ -107,6 +151,33 @@ export class HealthDataService {
       } catch (e) {
         reject(e);
       }
+    });
+  }
+
+  /**
+   * Every record in the range. Health Connect pages its results; reading only
+   * the first page silently dropped the rest.
+   */
+  async _readAllRecords(recordType, startDate, endDate) {
+    const records = [];
+    let pageToken;
+    do {
+      const options = {timeRangeFilter: timeRange(startDate, endDate)};
+      if (pageToken) {
+        options.pageToken = pageToken;
+      }
+      const result = await this._healthConnect.readRecords(recordType, options);
+      records.push(...((result && result.records) || []));
+      pageToken = result && result.pageToken;
+    } while (pageToken);
+    return records;
+  }
+
+  /** Health Connect's own total, which removes duplicates across apps and devices. */
+  async _aggregate(recordType, startDate, endDate) {
+    return this._healthConnect.aggregateRecord({
+      recordType,
+      timeRangeFilter: timeRange(startDate, endDate),
     });
   }
 
@@ -173,6 +244,12 @@ export class HealthDataService {
     return null;
   }
 
+  /**
+   * Steps per day in the range, as `{startDate, endDate, value}`. On Android
+   * each day is Health Connect's de-duplicated total (raw records double-count
+   * steps when a phone and a watch both record them), matching the daily
+   * samples HealthKit returns on iOS.
+   */
   async getStepsData(startDate, endDate) {
     this._loadModules();
 
@@ -189,18 +266,26 @@ export class HealthDataService {
 
     if (Platform.OS === 'android' && this._healthConnect) {
       try {
-        const result = await this._healthConnect.readRecords('Steps', {
-          timeRangeFilter: {
-            operator: 'between',
-            startTime: startDate.toISOString(),
-            endTime: endDate.toISOString(),
-          },
-        });
-        return (result.records || []).map(r => ({
-          startDate: r.startTime,
-          endDate: r.endTime,
-          value: r.count,
-        }));
+        const days = [];
+        for (
+          let dayStart = new Date(startDate);
+          dayStart < endDate;
+          dayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+        ) {
+          const dayEnd = new Date(
+            Math.min(dayStart.getTime() + 24 * 60 * 60 * 1000, endDate.getTime()),
+          );
+          const result = await this._aggregate('Steps', dayStart, dayEnd);
+          const value = (result && result.COUNT_TOTAL) || 0;
+          if (value > 0) {
+            days.push({
+              startDate: dayStart.toISOString(),
+              endDate: dayEnd.toISOString(),
+              value,
+            });
+          }
+        }
+        return days;
       } catch (e) {
         return [];
       }
@@ -227,18 +312,8 @@ export class HealthDataService {
 
     if (Platform.OS === 'android' && this._healthConnect) {
       try {
-        const result = await this._healthConnect.readRecords('Steps', {
-          timeRangeFilter: {
-            operator: 'between',
-            startTime: today.toISOString(),
-            endTime: now.toISOString(),
-          },
-        });
-        let total = 0;
-        (result.records || []).forEach(r => {
-          total += r.count || 0;
-        });
-        return total;
+        const result = await this._aggregate('Steps', today, now);
+        return (result && result.COUNT_TOTAL) || 0;
       } catch (e) {
         return 0;
       }
@@ -264,20 +339,16 @@ export class HealthDataService {
 
     if (Platform.OS === 'android' && this._healthConnect) {
       try {
-        const result = await this._healthConnect.readRecords(
+        const records = await this._readAllRecords(
           'ActiveCaloriesBurned',
-          {
-            timeRangeFilter: {
-              operator: 'between',
-              startTime: startDate.toISOString(),
-              endTime: endDate.toISOString(),
-            },
-          },
+          startDate,
+          endDate,
         );
-        return (result.records || []).map(r => ({
+        // Health Connect energy is {inKilocalories, inCalories, ...}; there is no `.value`.
+        return records.map(r => ({
           startDate: r.startTime,
           endDate: r.endTime,
-          value: r.energy?.value || 0,
+          value: (r.energy && r.energy.inKilocalories) || 0,
         }));
       } catch (e) {
         return [];
@@ -303,14 +374,12 @@ export class HealthDataService {
 
     if (Platform.OS === 'android' && this._healthConnect) {
       try {
-        const result = await this._healthConnect.readRecords('SleepSession', {
-          timeRangeFilter: {
-            operator: 'between',
-            startTime: startDate.toISOString(),
-            endTime: endDate.toISOString(),
-          },
-        });
-        return (result.records || []).map(r => ({
+        const records = await this._readAllRecords(
+          'SleepSession',
+          startDate,
+          endDate,
+        );
+        return records.map(r => ({
           startDate: r.startTime,
           endDate: r.endTime,
           value: r.stages || [],
@@ -323,10 +392,16 @@ export class HealthDataService {
     return [];
   }
 
+  /**
+   * Hours asleep between 18:00 yesterday and 12:00 today, or null when there
+   * is no sleep data. Only time asleep counts (not time in bed or awake), and
+   * overlapping samples from several sources count once.
+   */
   async getLastNightSleepHours() {
     this._loadModules();
     const start = lastNightStart();
     const end = lastNightEnd();
+    const toHours = ms => (ms > 0 ? ms / (1000 * 60 * 60) : null);
 
     if (Platform.OS === 'ios' && this._healthKit) {
       try {
@@ -337,15 +412,10 @@ export class HealthDataService {
         if (!results || !Array.isArray(results) || results.length === 0) {
           return null;
         }
-        let totalMs = 0;
-        results.forEach(s => {
-          const sStart = new Date(s.startDate).getTime();
-          const sEnd = new Date(s.endDate).getTime();
-          if (sEnd > sStart) {
-            totalMs += sEnd - sStart;
-          }
-        });
-        return totalMs > 0 ? totalMs / (1000 * 60 * 60) : null;
+        const asleep = results
+          .filter(s => IOS_ASLEEP_VALUES.has(s.value))
+          .map(s => ({start: s.startDate, end: s.endDate}));
+        return toHours(mergedDurationMs(asleep));
       } catch (e) {
         return null;
       }
@@ -353,25 +423,22 @@ export class HealthDataService {
 
     if (Platform.OS === 'android' && this._healthConnect) {
       try {
-        const result = await this._healthConnect.readRecords('SleepSession', {
-          timeRangeFilter: {
-            operator: 'between',
-            startTime: start.toISOString(),
-            endTime: end.toISOString(),
-          },
-        });
-        const records = result.records || [];
+        const records = await this._readAllRecords('SleepSession', start, end);
         if (records.length === 0) return null;
 
-        let totalMs = 0;
+        const asleep = [];
         records.forEach(r => {
-          const sStart = new Date(r.startTime).getTime();
-          const sEnd = new Date(r.endTime).getTime();
-          if (sEnd > sStart) {
-            totalMs += sEnd - sStart;
+          const stages = Array.isArray(r.stages) ? r.stages : [];
+          if (stages.length > 0) {
+            stages
+              .filter(st => ANDROID_ASLEEP_STAGES.has(st.stage))
+              .forEach(st => asleep.push({start: st.startTime, end: st.endTime}));
+          } else {
+            // A session without stages is recorded sleep as a whole.
+            asleep.push({start: r.startTime, end: r.endTime});
           }
         });
-        return totalMs > 0 ? totalMs / (1000 * 60 * 60) : null;
+        return toHours(mergedDurationMs(asleep));
       } catch (e) {
         return null;
       }
@@ -380,6 +447,7 @@ export class HealthDataService {
     return null;
   }
 
+  /** Workouts in the range; `duration` is in minutes on both platforms. */
   async getWorkouts(startDate, endDate) {
     this._loadModules();
     const outdoorIos = outdoorActivitiesIosSet();
@@ -394,7 +462,8 @@ export class HealthDataService {
         if (!results || !results.data) return [];
         return results.data.map(w => ({
           activityType: w.activityName || 'Unknown',
-          duration: w.duration || 0,
+          // react-native-health reports duration in seconds (NSTimeInterval).
+          duration: (w.duration || 0) / 60,
           startDate: w.start,
           endDate: w.end,
           isOutdoor: outdoorIos.has(w.activityName),
@@ -406,17 +475,12 @@ export class HealthDataService {
 
     if (Platform.OS === 'android' && this._healthConnect) {
       try {
-        const result = await this._healthConnect.readRecords(
+        const records = await this._readAllRecords(
           'ExerciseSession',
-          {
-            timeRangeFilter: {
-              operator: 'between',
-              startTime: startDate.toISOString(),
-              endTime: endDate.toISOString(),
-            },
-          },
+          startDate,
+          endDate,
         );
-        return (result.records || []).map(r => {
+        return records.map(r => {
           const sStart = new Date(r.startTime).getTime();
           const sEnd = new Date(r.endTime).getTime();
           return {
@@ -449,6 +513,7 @@ export class HealthDataService {
     return Math.round(totalMinutes);
   }
 
+  /** Litres drunk today, or null when nothing is recorded. */
   async getTodayWaterIntake() {
     this._loadModules();
     const today = startOfToday();
@@ -469,26 +534,11 @@ export class HealthDataService {
 
     if (Platform.OS === 'android' && this._healthConnect) {
       try {
-        const result = await this._healthConnect.readRecords('Hydration', {
-          timeRangeFilter: {
-            operator: 'between',
-            startTime: today.toISOString(),
-            endTime: now.toISOString(),
-          },
-        });
-        const records = result.records || [];
-        if (records.length === 0) return null;
-
-        let totalL = 0;
-        records.forEach(r => {
-          if (r.volume) {
-            let litres = r.volume.value || 0;
-            if (r.volume.unit === 'milliliters') litres /= 1000;
-            else if (r.volume.unit === 'fluidOuncesUs') litres *= 0.0295735;
-            totalL += litres;
-          }
-        });
-        return totalL > 0 ? totalL : null;
+        // Volume is {inLiters, inMilliliters, inFluidOuncesUs}; there is no `.value`.
+        const result = await this._aggregate('Hydration', today, now);
+        const litres =
+          (result && result.VOLUME_TOTAL && result.VOLUME_TOTAL.inLiters) || 0;
+        return litres > 0 ? litres : null;
       } catch (e) {
         return null;
       }
