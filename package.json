@@ -1,6 +1,6 @@
 {
   "name": "@molecare/health-data",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read steps, sleep, workouts, active energy and water from Apple HealthKit and Google Health Connect through one React Native API. Read-only.",
   "main": "src/index.js",
   "license": "Apache-2.0",

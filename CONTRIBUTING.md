@@ -16,6 +16,10 @@ run in plain Node, so it is a good place for a first contribution.
   medical device, and changes that turn numbers into health advice, scores or
   warnings will be declined, however good the code is.
 
+- **Stateless.** No module state, no shared instance, no global `configure()`
+  and no caches. Settings are constructor options with defaults in
+  `src/defaults.js`, and a test fails on any module-level `let` or `var`.
+
 If you are unsure whether a change fits, open an issue and ask before writing
 the code.
 

@@ -1,8 +1,5 @@
 import {Platform, NativeModules} from 'react-native';
-import {
-  outdoorActivitiesIosSet,
-  outdoorExerciseTypesAndroidSet,
-} from './config';
+import {resolveOptions} from './defaults';
 import {loadHealthConnect} from './healthConnect';
 
 /**
@@ -15,7 +12,8 @@ import {loadHealthConnect} from './healthConnect';
  * iOS uses NativeModules.AppleHealthKit directly rather than the library's
  * index.js Object.assign export, which can lose native method references.
  *
- * No backend URLs or product hosts are used in this package.
+ * No module state and no shared instance: the app creates a service with its
+ * own options and keeps it. No backend URLs or product hosts are used.
  */
 
 /**
@@ -45,16 +43,16 @@ function daysAgo(n) {
   return d;
 }
 
-function lastNightStart() {
+function lastNightStart(hour) {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  d.setHours(18, 0, 0, 0);
+  d.setHours(hour, 0, 0, 0);
   return d;
 }
 
-function lastNightEnd() {
+function lastNightEnd(hour) {
   const d = new Date();
-  d.setHours(12, 0, 0, 0);
+  d.setHours(hour, 0, 0, 0);
   return d;
 }
 
@@ -103,11 +101,23 @@ function timeRange(startDate, endDate) {
 }
 
 export class HealthDataService {
-  constructor() {
+  /**
+   * @param {Object} [options] - see DEFAULT_OPTIONS: outdoorActivitiesIos,
+   *   outdoorExerciseTypesAndroid, sleepWindowStartHour, sleepWindowEndHour,
+   *   summaryDays. Copied and frozen; an unknown or invalid option throws.
+   */
+  constructor(options) {
+    this._options = resolveOptions(options);
+    this._outdoorIos = new Set(this._options.outdoorActivitiesIos);
+    this._outdoorAndroid = new Set(this._options.outdoorExerciseTypesAndroid);
     this._initialized = false;
-    this._available = null;
     this._healthKit = null;
     this._healthConnect = null;
+  }
+
+  /** The options this service was created with (frozen). */
+  get options() {
+    return this._options;
   }
 
   _loadModules() {
@@ -188,30 +198,31 @@ export class HealthDataService {
     });
   }
 
+  /**
+   * Asked of the platform every time, never cached: Health Connect can be
+   * installed or updated while the app is running.
+   */
   async isAvailable() {
-    if (this._available !== null) return this._available;
     this._loadModules();
 
     if (Platform.OS === 'ios' && this._healthKit) {
       try {
-        const available = await this._callNative('isAvailable');
-        this._available = !!available;
+        return !!(await this._callNative('isAvailable'));
       } catch (e) {
         console.warn('[HealthDataService] isAvailable check failed:', e);
-        this._available = false;
+        return false;
       }
-    } else if (Platform.OS === 'android' && this._healthConnect) {
+    }
+    if (Platform.OS === 'android' && this._healthConnect) {
       try {
         const status = await this._healthConnect.getSdkStatus();
-        this._available = status === 3; // SDK_AVAILABLE
+        return status === 3; // SDK_AVAILABLE
       } catch (e) {
         console.warn('[HealthDataService] getSdkStatus failed:', e);
-        this._available = false;
+        return false;
       }
-    } else {
-      this._available = false;
     }
-    return this._available;
+    return false;
   }
 
   /**
@@ -405,14 +416,15 @@ export class HealthDataService {
   }
 
   /**
-   * Hours asleep between 18:00 yesterday and 12:00 today, or null when there
-   * is no sleep data. Only time asleep counts (not time in bed or awake), and
-   * overlapping samples from several sources count once.
+   * Hours asleep between sleepWindowStartHour yesterday and sleepWindowEndHour
+   * today (18:00 and 12:00 by default), or null when there is no sleep data.
+   * Only time asleep counts (not time in bed or awake), and overlapping samples
+   * from several sources count once.
    */
   async getLastNightSleepHours() {
     this._loadModules();
-    const start = lastNightStart();
-    const end = lastNightEnd();
+    const start = lastNightStart(this._options.sleepWindowStartHour);
+    const end = lastNightEnd(this._options.sleepWindowEndHour);
     const toHours = ms => (ms > 0 ? ms / (1000 * 60 * 60) : null);
 
     if (Platform.OS === 'ios' && this._healthKit) {
@@ -462,8 +474,8 @@ export class HealthDataService {
   /** Workouts in the range; `duration` is in minutes on both platforms. */
   async getWorkouts(startDate, endDate) {
     this._loadModules();
-    const outdoorIos = outdoorActivitiesIosSet();
-    const outdoorAndroid = outdoorExerciseTypesAndroidSet();
+    const outdoorIos = this._outdoorIos;
+    const outdoorAndroid = this._outdoorAndroid;
 
     if (Platform.OS === 'ios' && this._healthKit) {
       try {
@@ -559,8 +571,9 @@ export class HealthDataService {
     return null;
   }
 
+  /** From midnight `summaryDays` (7 by default) days ago until now. */
   async getWeeklyOutdoorSummary() {
-    const weekStart = daysAgo(7);
+    const weekStart = daysAgo(this._options.summaryDays);
     const now = new Date();
 
     const workouts = await this.getWorkouts(weekStart, now);
@@ -595,10 +608,11 @@ export class HealthDataService {
     };
   }
 
+  /**
+   * Whether requestPermissions has finished on this instance. It does not say
+   * access was granted: HealthKit never tells apps whether read access was.
+   */
   isInitialized() {
     return this._initialized;
   }
 }
-
-const defaultInstance = new HealthDataService();
-export default defaultInstance;
