@@ -43,6 +43,16 @@ function daysAgo(n) {
   return d;
 }
 
+/**
+ * The same local time on the next calendar day. Calendar arithmetic, not
+ * 24 hours of milliseconds: the days the clocks change are 23 or 25 hours long.
+ */
+function nextDay(date) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + 1);
+  return d;
+}
+
 function lastNightStart(hour) {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -293,10 +303,10 @@ export class HealthDataService {
         for (
           let dayStart = new Date(startDate);
           dayStart < endDate;
-          dayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+          dayStart = nextDay(dayStart)
         ) {
           const dayEnd = new Date(
-            Math.min(dayStart.getTime() + 24 * 60 * 60 * 1000, endDate.getTime()),
+            Math.min(nextDay(dayStart).getTime(), endDate.getTime()),
           );
           const result = await this._aggregate('Steps', dayStart, dayEnd);
           const value = (result && result.COUNT_TOTAL) || 0;
