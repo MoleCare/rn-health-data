@@ -5,8 +5,24 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # Minor and patch updates of the development tools arrive together.
+      # A major update arrives as its own pull request, so CI judges it alone.
       dev-tooling:
         dependency-type: development
+        update-types: ['minor', 'patch']
+    ignore:
+      # These move only with a coordinated change, never as a lockfile bump.
+      # typescript-eslint declares an upper bound on TypeScript (below 6.1 for
+      # 8.70), and TypeScript minor versions can cross it too.
+      - dependency-name: 'typescript'
+        update-types:
+          ['version-update:semver-major', 'version-update:semver-minor']
+      # Babel 8 needs babel-jest and react-native-builder-bob to support it.
+      - dependency-name: '@babel/*'
+        update-types: ['version-update:semver-major']
+      # @types/node follows the Node version CI runs (22).
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     open-pull-requests-limit: 5
 
   - package-ecosystem: github-actions
