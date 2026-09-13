@@ -80,12 +80,12 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@babel/core": "^7.28.0",
-    "@babel/preset-env": "^7.28.0",
-    "@babel/preset-typescript": "^7.27.0",
+    "@babel/core": "^8.0.1",
+    "@babel/preset-env": "^8.0.2",
+    "@babel/preset-typescript": "^8.0.1",
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.5.1",
     "babel-jest": "^30.5.1",
     "del-cli": "^7.0.0",
     "eslint": "^10.10.0",
@@ -94,7 +94,7 @@
     "prettier": "^3.9.6",
     "publint": "^0.3.24",
     "react-native-builder-bob": "^0.43.1",
-    "typescript": "~6.0.3",
+    "typescript": "~7.0.2",
     "typescript-eslint": "^8.70.0"
   },
   "jest": {
