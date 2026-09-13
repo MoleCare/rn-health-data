@@ -15,29 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: test (node ${{ matrix.node }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['20', '22']
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-
-      - run: npm ci
-      - run: npx jest --ci
-
-  package:
-    name: the npm tarball holds only what users need
+  check:
+    name: lint, types, tests, build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -48,16 +27,69 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format
+      - run: npm run typecheck
+      - run: npx jest --ci --coverage
+      - run: npm run build
+
+  package:
+    name: exports, types and tarball contents
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # publint checks package.json against the files; arethetypeswrong checks
+      # that require() and import each get the right types.
+      - run: npm run check:package
 
       # A test fixture, a .env or a stray photo in the tarball would be
       # published to everyone; fail instead.
-      - name: Check the packed file list
+      - name: Only built code, sources and docs are published
         run: |
-          npm pack --dry-run --json > pack.json
+          npm pack --dry-run --json --ignore-scripts > pack.json
           node -e '
             const files = require("./pack.json")[0].files.map(f => f.path);
-            const allowed = /^(src\/[^/]+\.js|LICENSE|README\.md|SECURITY\.md|package\.json)$/;
+            const allowed = /^(lib\/(commonjs|module|typescript\/(commonjs|module)(\/src)?)\/[^/]+\.(js|js\.map|d\.ts|d\.ts\.map|json)|src\/[^/]+\.ts|CHANGELOG\.md|LICENSE|README\.md|SECURITY\.md|package\.json)$/;
             const bad = files.filter(f => !allowed.test(f));
             console.log(files.join("\n"));
             if (bad.length) { console.error("Not allowed in the package:", bad); process.exit(1); }
+            if (!files.some(f => f.startsWith("lib/"))) { console.error("No built code in the package"); process.exit(1); }
           '
+
+  consumer:
+    name: installs with ${{ matrix.pm }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        pm: [npm, yarn1, yarn4-pnp, yarn4-node-modules, pnpm, bun]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - name: Pack the package as it would be published
+        run: npm pack
+      - name: Install it with ${{ matrix.pm }} and load it
+        run: bash scripts/check-consumer.sh ${{ matrix.pm }} ./molecare-health-data-*.tgz

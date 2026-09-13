@@ -1,5 +1,3 @@
-/* eslint-env node */
-
 // Every test runs in a time zone with daylight saving, whatever the machine or
 // CI runner uses, so date bugs show up everywhere and results do not depend on
 // where the tests run.
