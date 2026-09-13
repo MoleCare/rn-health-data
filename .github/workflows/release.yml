@@ -1,6 +1,8 @@
 name: Release
 
-# Publishes to npm when a GitHub Release is published.
+# Publishes to npm when a GitHub Release is published. Every package manager
+# (npm, Yarn, pnpm, Bun) and Expo installs from the npm registry, so this one
+# publish makes the package available to all of them.
 #
 # Authentication is npm trusted publishing: GitHub's OIDC token proves the
 # package is built by this workflow in this repository, so no npm token is
@@ -20,7 +22,7 @@ permissions:
 
 jobs:
   verify:
-    name: tag matches the version, tests pass
+    name: tag matches the version, checks pass
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -33,7 +35,7 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Tag matches package.json
+      - name: Tag matches package.json and the changelog
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
@@ -42,9 +44,16 @@ jobs:
             echo "Release tag $TAG does not match package.json version v$VERSION"
             exit 1
           fi
+          if ! grep -q "^## $VERSION\b" CHANGELOG.md; then
+            echo "CHANGELOG.md has no section for $VERSION"
+            exit 1
+          fi
 
       - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npx jest --ci
+      - run: npm run check:package
 
   publish:
     name: publish to npm
@@ -67,4 +76,6 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - run: npm ci --ignore-scripts
-      - run: npm publish --access public
+      - run: npm run build
+      # Built above, once; --ignore-scripts stops prepack building it again.
+      - run: npm publish --access public --ignore-scripts

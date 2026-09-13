@@ -1,9 +1,10 @@
 # @molecare/health-data
 
 Read steps, sleep, workouts, active energy and water from Apple HealthKit (iOS)
-and Google Health Connect (Android) through one JavaScript API for React Native.
+and Google Health Connect (Android) through one typed API for React Native.
 
-It only reads. It never writes health data.
+It only reads. It never writes health data. Every read tells you whether it
+worked, so "no permission" is never mistaken for "no activity".
 
 ## Not a medical device
 
@@ -14,9 +15,8 @@ recorded them.
 
 ## Privacy
 
-- The package stores nothing, sends nothing over the network and has no
-  analytics. Data leaves the phone only if your app sends it.
-- It logs error messages, never health values.
+- The package stores nothing, sends nothing over the network, has no analytics
+  and logs nothing. Data leaves the phone only if your app sends it.
 - Your app is responsible for its own privacy policy. Google Play asks apps
   that use Health Connect for a health apps declaration and a privacy policy.
   Apple requires a HealthKit usage description and does not allow HealthKit
@@ -24,21 +24,39 @@ recorded them.
 
 ## Install
 
+Use your project's package manager; they all install from the npm registry.
+Add the platform libraries for the platforms you ship.
+
 ```bash
-npm install @molecare/health-data
-npm install react-native-health           # iOS
-npm install react-native-health-connect   # Android
+npm install @molecare/health-data react-native-health react-native-health-connect
+yarn add @molecare/health-data react-native-health react-native-health-connect
+pnpm add @molecare/health-data react-native-health react-native-health-connect
+bun add @molecare/health-data react-native-health react-native-health-connect
 ```
 
-| Platform | Peer dependency | Version |
-|---|---|---|
-| iOS | [`react-native-health`](https://github.com/agencyenterprise/react-native-health) | `>=1.19.0` |
-| Android | [`react-native-health-connect`](https://github.com/matinzd/react-native-health-connect) | `>=3.5.0` |
+| Platform | Peer dependency                                                                         | Version      |
+| -------- | --------------------------------------------------------------------------------------- | ------------ |
+| iOS      | [`react-native-health`](https://github.com/agencyenterprise/react-native-health)        | `^1.19.0`    |
+| Android  | [`react-native-health-connect`](https://github.com/matinzd/react-native-health-connect) | `>=3.5.0 <5` |
 
-Both peers are optional. An iOS-only app does not need
-`react-native-health-connect` (the Android module is loaded from a
-platform-specific file, so Metro leaves it out of iOS builds), and an
-Android-only app does not need `react-native-health`.
+Both are optional. An iOS-only app does not need `react-native-health-connect`
+(it is loaded from a platform-specific file, so Metro leaves it out of iOS
+builds), and an Android-only app does not need `react-native-health`.
+
+### Works with
+
+|                  |                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| React Native     | Metro, with or without package `exports` enabled                                                      |
+| Package managers | npm, Yarn 1, Yarn 4 (Plug'n'Play and `node_modules`), pnpm, Bun, each checked in CI                   |
+| Bundlers         | Metro, webpack, esbuild: the ES module build, with iOS and Android files chosen by platform extension |
+| Node             | `require` (the CommonJS build). Not plain-Node `import`: the platform file needs a bundler            |
+| Jest             | default settings; mock `react-native` and the platform libraries as usual                             |
+| TypeScript       | types included; `moduleResolution` `bundler`, `node16` and `nodenext`                                 |
+
+**Expo:** this package has no native code of its own. Use a development build
+and the platform libraries' own config plugins. `react-native-health-connect`
+4.x ships one, and `react-native-health` documents its Expo setup.
 
 ## iOS setup
 
@@ -108,75 +126,118 @@ Android-only app does not need `react-native-health`.
    ```
 
    See the
-   [`react-native-health-connect` permissions guide](https://matinzd.github.io/react-native-health-connect/docs/permissions)
-   for details.
+   [`react-native-health-connect` permissions guide](https://matinzd.github.io/react-native-health-connect/docs/permissions).
 
-## Usage
+## Use
 
-```js
-import {HealthDataService} from '@molecare/health-data';
+```ts
+import { createHealthData } from '@molecare/health-data';
 
 // Create it once and keep it with your app's other services.
-const health = new HealthDataService();
+const health = createHealthData();
 
-if (await health.isAvailable()) {
-  // Ask only for what your app uses.
+const availability = await health.getAvailability();
+if (availability.ok && availability.value === 'available') {
+  // Ask only for what your app uses. On iOS, call this once per app launch
+  // before reading; HealthKit only shows its sheet for types not yet decided.
   await health.requestPermissions(['steps', 'sleep']);
 
-  const steps = await health.getTodaySteps();
-  const sleepHours = await health.getLastNightSleepHours(); // null when nothing is recorded
+  const steps = await health.getSteps();
+  if (steps.ok) {
+    show(steps.value);
+  } else if (steps.error.code === 'not_permitted') {
+    askAgainLater();
+  }
+
+  const sleep = await health.getSleepHours(); // value is null when nothing was recorded
 }
 ```
 
+### Results, not silent zeros
+
+Every method resolves to a `HealthResult<T>`:
+
+```ts
+type HealthResult<T> =
+  | { ok: true; value: T }
+  | {
+      ok: false;
+      error: { code: HealthErrorCode; message: string; cause?: unknown };
+    };
+```
+
+| `error.code`           | Meaning                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `unsupported_platform` | Neither iOS nor Android                                                        |
+| `module_missing`       | `react-native-health` or `react-native-health-connect` is not installed/linked |
+| `unavailable`          | Health Connect is not installed, needs an update, or could not start           |
+| `not_permitted`        | Read access was not granted (Android only; see below)                          |
+| `native_error`         | The platform reported an error; `cause` holds it                               |
+
+Only programming errors are thrown: an invalid option makes `createHealthData`
+throw a `TypeError`, and an invalid argument (a bad date or range, an unknown
+data type) makes the method reject with one.
+
+**What iOS can't tell you.** HealthKit never tells an app whether read access
+was granted. Reading data the user declined returns no samples, which looks
+like no activity. So on iOS `getPermissionStatus` answers `{known: false}`, and
+reads never fail with `not_permitted`. On Android both are exact.
+
+## API
+
+| Method                          | Value                                                                                                                                              |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getAvailability()`             | `'available' \| 'not_installed' \| 'update_required' \| 'unsupported_platform' \| 'module_missing'`                                                |
+| `requestPermissions(types?)`    | `PermissionStatus`. Read access to the listed `HealthDataType`s (all five by default)                                                              |
+| `getPermissionStatus(types?)`   | `PermissionStatus` without asking: `{known: true, granted, denied}` on Android, `{known: false, requested}` on iOS                                 |
+| `getSteps(day?)`                | Steps on a local calendar day (today up to now by default)                                                                                         |
+| `getDailySteps({start, end})`   | `{date, startDate, endDate, steps}[]`, days with steps only                                                                                        |
+| `getActiveEnergy({start, end})` | `{startDate, endDate, kilocalories}[]`                                                                                                             |
+| `getSleep({start, end})`        | `{startDate, endDate, stage}[]`, stages `asleep`, `light`, `deep`, `rem`, `awake`, `in_bed`, `out_of_bed`, `unknown`                               |
+| `getSleepHours(night?)`         | Hours asleep, or `null` with no sleep recorded. From `sleepWindowStartHour` the day before to `sleepWindowEndHour`; overlapping samples count once |
+| `getWorkouts({start, end})`     | `{activityType, durationMinutes, startDate, endDate, isOutdoor}[]`                                                                                 |
+| `getOutdoorMinutes(day?)`       | Outdoor workout minutes on a local calendar day                                                                                                    |
+| `getWaterLitres(day?)`          | Litres, or `null` with none recorded                                                                                                               |
+| `getOutdoorSummary()`           | `{totalOutdoorMinutes, averageDailySteps, activeDays}` from midnight `summaryDays` ago                                                             |
+
+`HealthDataType` is `'steps' | 'sleep' | 'workouts' | 'activeEnergy' | 'water'`
+(all listed in `HEALTH_DATA_TYPES`). Days are local calendar days, including the
+days the clocks change.
+
+On Android, Health Connect's totals are used for steps and water, so steps
+recorded by both a phone and a watch count once.
+
 ## No state, no global settings
 
-The package has no shared instance and no global configuration. Your app
-creates a `HealthDataService` and chooses its settings; two services with
-different settings never affect each other. Options are copied and frozen when
-the service is created, and an unknown or invalid option throws a `TypeError`.
+`createHealthData` returns a frozen client with no state of its own: no cache,
+no singleton, no global configuration. Options are copied and frozen at
+creation, and an unknown or invalid option throws a `TypeError`.
 
-| Option | Default | Meaning |
-|---|---|---|
-| `outdoorActivitiesIos` | `DEFAULT_OUTDOOR_ACTIVITIES_IOS` | HealthKit activity names `getWorkouts` marks `isOutdoor` |
-| `outdoorExerciseTypesAndroid` | `DEFAULT_OUTDOOR_EXERCISE_TYPES_ANDROID` | Health Connect exercise type numbers marked `isOutdoor` |
-| `sleepWindowStartHour` | `18` | "Last night" starts at this hour yesterday (local time) |
-| `sleepWindowEndHour` | `12` | ...and ends at this hour today |
-| `summaryDays` | `7` | `getWeeklyOutdoorSummary` reads from midnight this many days ago |
+| Option                        | Default                                  | Meaning                                                    |
+| ----------------------------- | ---------------------------------------- | ---------------------------------------------------------- |
+| `outdoorActivitiesIos`        | `DEFAULT_OUTDOOR_ACTIVITIES_IOS`         | HealthKit activity names counted as outdoor                |
+| `outdoorExerciseTypesAndroid` | `DEFAULT_OUTDOOR_EXERCISE_TYPES_ANDROID` | Health Connect exercise type numbers counted as outdoor    |
+| `sleepWindowStartHour`        | `18`                                     | "Last night" starts at this local hour the day before      |
+| `sleepWindowEndHour`          | `12`                                     | ...and ends at this local hour                             |
+| `summaryDays`                 | `7`                                      | `getOutdoorSummary` reads from midnight this many days ago |
+| `now`                         | `() => new Date()`                       | The clock for "today" and "last night"                     |
 
-```js
-import {HealthDataService, DEFAULT_OUTDOOR_ACTIVITIES_IOS} from '@molecare/health-data';
+```ts
+import {
+  createHealthData,
+  DEFAULT_OUTDOOR_ACTIVITIES_IOS,
+} from '@molecare/health-data';
 
-const health = new HealthDataService({
+const health = createHealthData({
   outdoorActivitiesIos: [...DEFAULT_OUTDOOR_ACTIVITIES_IOS, 'Yoga'],
-  outdoorExerciseTypesAndroid: [56, 79, 8],
   sleepWindowStartHour: 20,
 });
 ```
 
-Nothing is cached: `isAvailable()` asks the platform each time, because Health
-Connect can be installed while your app is running. The package stores no
-health data; what to keep, and where, is your app's decision.
+## Upgrading from 0.x
 
-## API
-
-| Method | Returns | Notes |
-|---|---|---|
-| `isAvailable()` | `boolean` | HealthKit is available, or the Health Connect SDK is available |
-| `requestPermissions(types?)` | platform result | `types` from `HEALTH_DATA_TYPES`: `'steps'`, `'sleep'`, `'workouts'`, `'activeEnergy'`, `'water'`. All five by default. Throws on an unknown type. Read access only. |
-| `getTodaySteps()` | `number` | On Android, Health Connect's total, de-duplicated across apps and devices |
-| `getStepsData(start, end)` | `[{startDate, endDate, value}]` | One entry per day |
-| `getActiveEnergyBurned(start, end)` | `[{startDate, endDate, value}]` | Kilocalories |
-| `getSleepData(start, end)` | raw samples | iOS: HealthKit sleep samples. Android: sessions, with stages in `value` |
-| `getLastNightSleepHours()` | `number \| null` | `sleepWindowStartHour` yesterday to `sleepWindowEndHour` today (18:00 to 12:00 by default). Time asleep only; overlapping samples count once |
-| `getWorkouts(start, end)` | `[{activityType, duration, startDate, endDate, isOutdoor}]` | `duration` in minutes |
-| `getTodayOutdoorWorkoutMinutes()` | `number` | |
-| `getTodayWaterIntake()` | `number \| null` | Litres |
-| `getWeeklyOutdoorSummary()` | `{totalOutdoorMinutes, avgDailySteps, activeDays}` | From midnight `summaryDays` (7) days ago until now |
-| `isInitialized()` | `boolean` | `true` once `requestPermissions` has finished on this service. It does not mean access was granted; HealthKit never tells apps that |
-| `options` | `object` | The frozen options the service was created with |
-
-When a read fails (no permission, module missing, platform error) the method
-returns an empty value (`0`, `[]` or `null`) instead of throwing.
+See [CHANGELOG.md](CHANGELOG.md): the class became `createHealthData`, reads
+return `HealthResult`s, and the "today" methods were renamed.
 
 ## Contributing
 
