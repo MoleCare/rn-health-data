@@ -3,6 +3,7 @@ import {
   outdoorActivitiesIosSet,
   outdoorExerciseTypesAndroidSet,
 } from './config';
+import {loadHealthConnect} from './healthConnect';
 
 /**
  * HealthDataService — abstraction over HealthKit (iOS) and Health Connect (Android).
@@ -17,13 +18,19 @@ import {
  * No backend URLs or product hosts are used in this package.
  */
 
-const HK_PERMISSIONS = {
-  StepCount: 'StepCount',
-  SleepAnalysis: 'SleepAnalysis',
-  Workout: 'Workout',
-  ActiveEnergyBurned: 'ActiveEnergyBurned',
-  Water: 'Water',
+/**
+ * The data this package reads, and what each is called on each platform.
+ * Apps pass the keys to requestPermissions() to ask only for what they use.
+ */
+const PERMISSIONS = {
+  steps: {ios: 'StepCount', android: 'Steps'},
+  sleep: {ios: 'SleepAnalysis', android: 'SleepSession'},
+  workouts: {ios: 'Workout', android: 'ExerciseSession'},
+  activeEnergy: {ios: 'ActiveEnergyBurned', android: 'ActiveCaloriesBurned'},
+  water: {ios: 'Water', android: 'Hydration'},
 };
+
+export const HEALTH_DATA_TYPES = Object.freeze(Object.keys(PERMISSIONS));
 
 function startOfToday() {
   const d = new Date();
@@ -122,7 +129,7 @@ export class HealthDataService {
     }
     if (Platform.OS === 'android' && !this._healthConnect) {
       try {
-        this._healthConnect = require('react-native-health-connect');
+        this._healthConnect = loadHealthConnect();
       } catch (e) {
         console.warn(
           '[HealthDataService] Failed to load Android health module:',
@@ -207,19 +214,28 @@ export class HealthDataService {
     return this._available;
   }
 
-  async requestPermissions() {
+  /**
+   * Ask the user for read access. Read-only: nothing is ever written.
+   *
+   * @param {string[]} [types] keys of HEALTH_DATA_TYPES; all of them by default.
+   *   Ask only for what the app uses.
+   */
+  async requestPermissions(types = HEALTH_DATA_TYPES) {
+    const unknown = (Array.isArray(types) ? types : [types]).filter(
+      t => !Object.prototype.hasOwnProperty.call(PERMISSIONS, t),
+    );
+    if (!Array.isArray(types) || types.length === 0 || unknown.length > 0) {
+      throw new Error(
+        `requestPermissions expects a non-empty list of: ${HEALTH_DATA_TYPES.join(', ')}` +
+          (unknown.length > 0 ? ` (got ${unknown.join(', ')})` : ''),
+      );
+    }
     this._loadModules();
 
     if (Platform.OS === 'ios' && this._healthKit) {
       const permissions = {
         permissions: {
-          read: [
-            HK_PERMISSIONS.StepCount,
-            HK_PERMISSIONS.SleepAnalysis,
-            HK_PERMISSIONS.Workout,
-            HK_PERMISSIONS.ActiveEnergyBurned,
-            HK_PERMISSIONS.Water,
-          ],
+          read: types.map(t => PERMISSIONS[t].ios),
           write: [],
         },
       };
@@ -230,13 +246,9 @@ export class HealthDataService {
 
     if (Platform.OS === 'android' && this._healthConnect) {
       await this._healthConnect.initialize();
-      const granted = await this._healthConnect.requestPermission([
-        {accessType: 'read', recordType: 'Steps'},
-        {accessType: 'read', recordType: 'SleepSession'},
-        {accessType: 'read', recordType: 'ExerciseSession'},
-        {accessType: 'read', recordType: 'ActiveCaloriesBurned'},
-        {accessType: 'read', recordType: 'Hydration'},
-      ]);
+      const granted = await this._healthConnect.requestPermission(
+        types.map(t => ({accessType: 'read', recordType: PERMISSIONS[t].android})),
+      );
       this._initialized = true;
       return granted;
     }

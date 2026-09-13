@@ -184,3 +184,90 @@ describe('iOS (HealthKit)', () => {
     await expect(service.getLastNightSleepHours()).resolves.toBe(5);
   });
 });
+
+describe('asking for permissions', () => {
+  const askedOnAndroid = () =>
+    healthConnect.requestPermission.mock.calls[0][0];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    healthConnect.initialize = jest.fn().mockResolvedValue(true);
+    healthConnect.requestPermission = jest.fn().mockResolvedValue([]);
+    mockHealthKit.initHealthKit = jest.fn(answers(true));
+  });
+
+  it('asks for all five kinds when no list is given, as before', async () => {
+    mockPlatform.OS = 'android';
+    await new HealthDataService().requestPermissions();
+
+    expect(askedOnAndroid()).toEqual([
+      {accessType: 'read', recordType: 'Steps'},
+      {accessType: 'read', recordType: 'SleepSession'},
+      {accessType: 'read', recordType: 'ExerciseSession'},
+      {accessType: 'read', recordType: 'ActiveCaloriesBurned'},
+      {accessType: 'read', recordType: 'Hydration'},
+    ]);
+  });
+
+  it('asks only for the listed data on Android', async () => {
+    mockPlatform.OS = 'android';
+    await new HealthDataService().requestPermissions(['steps', 'water']);
+
+    expect(askedOnAndroid()).toEqual([
+      {accessType: 'read', recordType: 'Steps'},
+      {accessType: 'read', recordType: 'Hydration'},
+    ]);
+  });
+
+  it('asks only for the listed data on iOS, and never for write access', async () => {
+    mockPlatform.OS = 'ios';
+    const service = new HealthDataService();
+    await service.requestPermissions(['sleep', 'workouts']);
+
+    expect(mockHealthKit.initHealthKit.mock.calls[0][0]).toEqual({
+      permissions: {read: ['SleepAnalysis', 'Workout'], write: []},
+    });
+    expect(service.isInitialized()).toBe(true);
+  });
+
+  it('refuses an unknown or empty list before asking the user anything', async () => {
+    mockPlatform.OS = 'android';
+    const service = new HealthDataService();
+
+    await expect(service.requestPermissions(['steps', 'heartRate'])).rejects.toThrow(
+      /heartRate/,
+    );
+    await expect(service.requestPermissions([])).rejects.toThrow();
+    expect(healthConnect.requestPermission).not.toHaveBeenCalled();
+    expect(service.isInitialized()).toBe(false);
+  });
+});
+
+describe('iOS-only apps', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const srcDir = path.join(__dirname, '..', 'src');
+
+  it('the iOS build never loads react-native-health-connect', () => {
+    // Metro resolves every require when it bundles, even one inside a try
+    // block, so a reference in any file of the iOS build breaks apps that do
+    // not install the Android library. Metro prefers name.ios.js over name.js.
+    const files = fs.readdirSync(srcDir).filter(f => f.endsWith('.js'));
+    const iosBuild = files.filter(
+      f =>
+        !/\.(ios|android)\.js$/.test(f) &&
+        !files.includes(f.replace(/\.js$/, '.ios.js')),
+    );
+    iosBuild.push(...files.filter(f => f.endsWith('.ios.js')));
+
+    const loadsIt =
+      /require\(\s*['"]react-native-health-connect['"]\s*\)|from\s+['"]react-native-health-connect['"]/;
+    for (const file of iosBuild) {
+      expect([file, loadsIt.test(fs.readFileSync(path.join(srcDir, file), 'utf8'))]).toEqual([
+        file,
+        false,
+      ]);
+    }
+    expect(require('../src/healthConnect.ios').loadHealthConnect()).toBeNull();
+  });
+});
