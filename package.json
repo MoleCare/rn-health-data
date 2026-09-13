@@ -33,8 +33,20 @@
     }
   },
   "scripts": {
-    "test": "echo \"no tests yet\"",
+    "test": "jest",
     "lint": "echo \"no lint configured yet\""
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "babel-jest": "^29.7.0",
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {
+      "^.+\\.js$": "babel-jest"
+    }
   },
   "files": [
     "src",
