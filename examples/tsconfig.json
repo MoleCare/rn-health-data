@@ -3,8 +3,8 @@
   "compilerOptions": {
     "rootDir": "..",
     "jsx": "react-jsx",
-    "types": [],
-    "paths": { "@molecare/health-data": ["./src/index.ts"] }
+    "types": ["node"],
+    "paths": { "@molecare/health-data": ["../src/index.ts"] }
   },
   "include": ["*.ts", "*.tsx"]
 }
