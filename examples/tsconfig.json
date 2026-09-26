@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "jsx": "react-jsx",
+    "types": [],
+    "paths": { "@molecare/health-data": ["./src/index.ts"] }
+  },
+  "include": ["*.ts", "*.tsx"]
+}

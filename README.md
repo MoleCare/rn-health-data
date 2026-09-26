@@ -158,6 +158,21 @@ if (availability.ok && availability.value === 'available') {
 }
 ```
 
+### Complete examples
+
+[`examples/`](examples/) has copy-paste starting points, typechecked and run in
+CI so they stay in step with the API:
+
+- [`healthService.ts`](examples/healthService.ts): create the client once, with
+  your settings.
+- [`ConnectHealthScreen.tsx`](examples/ConnectHealthScreen.tsx): a gentle,
+  skippable connect screen, including Health Connect missing or out of date
+  and iOS never saying what was allowed.
+- [`TodayCard.tsx`](examples/TodayCard.tsx): today's steps and last night's
+  sleep, each with its own state, never a silent zero.
+- [`weeklySummary.ts`](examples/weeklySummary.ts): a weekly summary from any
+  client, tested with a fake one.
+
 ### Results, not silent zeros
 
 Every method resolves to a `HealthResult<T>`:

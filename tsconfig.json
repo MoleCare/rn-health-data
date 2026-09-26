@@ -20,7 +20,10 @@
     "strict": true,
     "target": "ESNext",
     "types": ["jest", "node"],
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "@molecare/health-data": ["./src/index.ts"]
+    }
   },
   "include": ["src", "types", "__tests__"]
 }

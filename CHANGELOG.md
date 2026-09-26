@@ -4,6 +4,14 @@ All notable changes to this package are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- `examples/`: create-once service, a skippable connect screen, a today card
+  with per-reading states, and a weekly summary tested with a fake client. CI
+  typechecks and runs them. Not part of the published package.
+
 ## 1.0.0
 
 First public release. Breaking changes from 0.x, which was never published.
