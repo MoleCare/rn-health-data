@@ -1,5 +1,10 @@
 # @molecare/health-data
 
+[![CI](https://github.com/MoleCare/rn-health-data/actions/workflows/ci.yml/badge.svg)](https://github.com/MoleCare/rn-health-data/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@molecare/health-data)](https://www.npmjs.com/package/@molecare/health-data)
+![types included](https://img.shields.io/npm/types/@molecare/health-data)
+[![licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
+
 Read steps, sleep, workouts, active energy and water from Apple HealthKit (iOS)
 and Google Health Connect (Android) through one typed API for React Native.
 

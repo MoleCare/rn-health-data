@@ -1,0 +1,59 @@
+name: Bug report
+description: A reading, unit or permission result that does not match the README.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **Never paste, attach or link real health
+        data**, or an export from Apple Health or Health Connect, here or
+        anywhere in this repository. Describe the shape of the data instead
+        (for example "two overlapping sleep sessions, one from a watch"), with
+        made-up numbers.
+        Security problems go to info@molecare.co.uk instead (see SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you called, what you expected, and what came back (the result object, with made-up numbers).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Smallest example
+      description: A few lines of code, with the options you passed.
+      render: ts
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iOS (HealthKit)
+        - Android (Health Connect)
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      placeholder: '1.0.0'
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: React Native or Expo version, and the health library version
+      placeholder: 'React Native 0.80, react-native-health-connect 3.4'
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device, OS, and the app or watch that recorded the data
+      placeholder: 'Pixel 8, Android 15, readings from a Fitbit'
+    validations:
+      required: true
