@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security or privacy problem privately
+    url: https://github.com/MoleCare/rn-health-data/security/advisories/new
+    about: Please do not open a public issue for security or privacy problems.

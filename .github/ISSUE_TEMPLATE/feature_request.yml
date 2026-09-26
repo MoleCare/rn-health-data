@@ -1,0 +1,30 @@
+name: Feature request
+description: An idea that would make the package more useful.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This package reads health data and hands it to the app, nothing else
+        (see CONTRIBUTING.md). It stays read-only, sends and stores nothing, and
+        reports numbers, not judgements. Ideas that write data, add network
+        calls, or turn numbers into advice, scores or warnings will be declined.
+        A new data type or a fix to a unit is very welcome.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that is hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you would like it to work. For a new data type, link to where HealthKit and Health Connect document it.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I would like to open a pull request for this.
