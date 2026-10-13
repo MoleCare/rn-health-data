@@ -264,6 +264,18 @@ return `HealthResult`s, and the "today" methods were renamed.
 See [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately, as
 described in [SECURITY.md](SECURITY.md).
 
+## Contributors
+
+Thank you to everyone who has helped @molecare/health-data.
+
+<!-- readme: contributors,bots/- -start -->
+<!-- readme: contributors,bots/- -end -->
+
+The list is filled by [Contributors](./.github/workflows/contributors.yml) from
+GitHub commits, bots omitted — never hand-maintained, because a stale list is
+worse than none. [Contributor graph](https://github.com/MoleCare/rn-health-data/graphs/contributors) ·
+[good first issue](https://github.com/MoleCare/rn-health-data/labels/good%20first%20issue)
+
 ## License
 
 Apache-2.0 © MoleCare LTD
