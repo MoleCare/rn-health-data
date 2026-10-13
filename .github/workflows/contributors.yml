@@ -1,0 +1,42 @@
+name: Contributors
+
+# The wall lives in readme-contributors as a reusable workflow and is written
+# straight to main after every merge, with no separate pull request.
+#
+# It used to run on pull requests and push the refreshed wall to the PR
+# branch. That loses people: a fork's pull request cannot run it, and a
+# same-repository PR lands a wall computed before whatever merged ahead of it.
+# MoleCare/molecare-mcp lost a contributor that way, in 44 seconds. A run on
+# main after the merge sees every commit.
+#
+# main is protected, so the wall pushes through the write deploy key stored as
+# CONTRIBUTORS_DEPLOY_KEY, the one bypass actor on the ruleset besides the
+# owner.
+#
+# The key is passed by name, not with `secrets: inherit`: inherit only reaches
+# a reusable workflow in the same organisation, and the wall lives under
+# YauhenBichel, so inherit passed nothing and the push fell back to the
+# workflow token, which the protected branch refuses.
+#
+# pull-requests: read lets the wall include people who only show up as
+# merged PR authors. The reusable workflow cannot gain that scope unless
+# the caller grants it.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "53 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  wall:
+    uses: YauhenBichel/readme-contributors/.github/workflows/wall.yml@3f3b442309052873cae16e7fce8a28f465a88768 # v1.9.2
+    with:
+      format: html
+    secrets:
+      CONTRIBUTORS_DEPLOY_KEY: ${{ secrets.CONTRIBUTORS_DEPLOY_KEY }}
