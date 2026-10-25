@@ -89,14 +89,14 @@
     "@types/react": "^19.3.0",
     "babel-jest": "^30.5.2",
     "del-cli": "^7.0.0",
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "jest": "^30.5.2",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "publint": "^0.3.25",
-    "react-native-builder-bob": "^0.43.1",
+    "react-native-builder-bob": "^0.43.2",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.71.1"
+    "typescript-eslint": "^8.72.0"
   },
   "jest": {
     "globalSetup": "<rootDir>/jest.global-setup.cjs",
