@@ -281,4 +281,4 @@ worse than none. [Contributor graph](https://github.com/MoleCare/rn-health-data/
 
 ## License
 
-Apache-2.0 © MoleCare LTD
+Apache-2.0 © Aleh Bichel

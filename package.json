@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Read steps, sleep, workouts, active energy and water from Apple HealthKit and Google Health Connect through one typed React Native API. Read-only; every read returns a result instead of failing silently.",
   "license": "Apache-2.0",
-  "author": "MoleCare LTD <info@molecare.co.uk> (https://www.molecare.co.uk)",
+  "author": "Aleh Bichel <info@molecare.co.uk> (https://www.molecare.co.uk)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/MoleCare/rn-health-data.git"
